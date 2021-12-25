@@ -8,12 +8,13 @@
   },
   "author": "Mike Eason",
   "license": "MIT",
-  "dependencies": {
-    "edge-js": "^15.5.2"
-  },
   "devDependencies": {
+    "edge-js": "^16.6.0",
     "mock-require": "^2.0.2",
     "tap": "^10.1.1"
+  },
+  "peerDependencies": {
+    "edge-js": "*"
   },
   "repository": {
     "type": "git",
