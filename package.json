@@ -1,6 +1,6 @@
 {
   "name": "@sgvictorino/oledb",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Uses Edge.js to connect to an ADO.NET Databases.",
   "main": "index.js",
   "scripts": {
