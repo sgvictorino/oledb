@@ -2,6 +2,11 @@ export function oledbConnection(connectionString: string): Connection;
 export function odbcConnection(connectionString: string): Connection;
 export function sqlConnection(connectionString: string): Connection;
 
+type TransactionItem = {
+    query: string;
+    params?: CommandParameter | CommandParameter[];
+    type?: COMMAND_TYPES;
+}
 declare class Connection {
     constructor(constring: string, contype: string | null);
 
@@ -26,11 +31,7 @@ declare class Connection {
         params?: CommandParameter | CommandParameter[]
     ): Promise<CommandResult<FieldType>>;
     transaction(
-        commands: {
-            query: string;
-            params?: CommandParameter | CommandParameter[];
-            type?: COMMAND_TYPES;
-        }[]
+        commands: [TransactionItem, ...TransactionItem[]]
     ): Promise<CommandResult<unknown>[]>;
 }
 
