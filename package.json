@@ -1,7 +1,7 @@
 {
   "name": "@sgvictorino/oledb",
   "version": "2.0.2",
-  "description": "Uses Edge.js to connect to an ADO.NET Databases.",
+  "description": "(oledb fork) Use Edge.js to connect to ADO.NET databases",
   "main": "index.js",
   "scripts": {
     "test": "tap test.js"
