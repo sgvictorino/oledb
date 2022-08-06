@@ -1,6 +1,13 @@
-# oledb.js
+# oledb
 
-[![npm version](https://img.shields.io/badge/npm-v1.6.0-blue.svg)](https://www.npmjs.com/package/oledb)
+Fork of [Mike Eason's `oledb`](https://github.com/mike-eason/oledb) with the following changes:
+
+- TypeScript definitions
+- Returns `Date` values instead of `string`
+- Makes `edge-js` a peer dependency for easier Node upgrades
+
+---
+
 [![license](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 [![tips](https://img.shields.io/badge/tips-bitcoin-brightgreen.svg)](https://www.coinbase.com/blahyourhamster)
 
