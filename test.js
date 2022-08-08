@@ -7,14 +7,29 @@ const connectionString = 'mydatabase.dbc';
     Mock edge.js so we can check the options passed in.
 */
 mock('edge-js', {
-    func(filePath) {
-        return (options, callback) => {
-            if (options.constring != connectionString)
-                return callback('Connection strings do not match.');
-            if (options.commands == null || options.commands.length === 0)
-                return callback('Commands parameter must be an array of at least one command.');
+    func(_) {
+        function getOptionsError(options) {
+            const definedKeys = Object.entries(options).filter(([_, v]) => ![null, undefined].includes(v)).map(([k]) => k).sort();
+            if ([['constring', 'contype'], ['commands']].includes(definedKeys))
+                return 'Defined options must be either { constring, contype } or { commands }.'
 
-            return callback(null, []);
+            if (options.commands && options.commands.length === 0)
+                return 'Commands parameter must be an array of at least one command.';
+            if (options.constring && options.constring !== connectionString)
+                return 'Connection strings do not match.';
+
+            return null;
+        }
+        return (options) => {
+            const optionsError = getOptionsError(options)
+            if (optionsError) throw new Error(optionsError);
+
+            return {
+                run: (_, cb) => {
+                    cb(getOptionsError(options), [])
+                },
+                close: (_) => { }
+            };
         };
     }
 });
