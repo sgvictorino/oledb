@@ -7,17 +7,15 @@ const connectionString = 'mydatabase.dbc';
     Mock edge.js so we can check the options passed in.
 */
 mock('edge-js', {
-    func(filePath) {
-        return (options, callback) => {
+    func: (_) =>
+        (options) => {
             if (options.constring != connectionString)
                 return callback('Connection strings do not match.');
-            if (options.commands == null || options.commands.length === 0)
-                return callback('Commands parameter must be an array of at least one command.');
-
-            return callback(null, []);
-        };
-    }
-});
+            return ({
+                run: (_, callback) => callback(null, []),
+                close: (_) => { }
+            })}
+    });
 
 const oledb = require('./index');
 

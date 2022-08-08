@@ -2,8 +2,10 @@
 
 Fork of [Mike Eason's `oledb`](https://github.com/mike-eason/oledb) with the following changes:
 
+- **Breaking:**
+    - Returns `Date` values instead of `string`
+    - Keeps `DbConnection` open for better performance; adds a `.close` method
 - TypeScript definitions
-- Returns `Date` values instead of `string`
 - Makes `edge-js` a peer dependency for easier Node upgrades
 
 ---
@@ -30,6 +32,8 @@ db.query(command)
 err => {
     console.error(err);
 });
+
+db.close();
 ```
 
 The result will look like this:

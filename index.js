@@ -1,5 +1,6 @@
 const edge = require('edge-js');
-const data = edge.func(__dirname + '/Data.cs');
+const newConnection = edge.func(__dirname + '/Data.cs');
+const { promisify } = require('util');
 
 const COMMAND_TYPES = {
     QUERY: 'query',
@@ -22,54 +23,9 @@ const CONNECTION_TYPES = {
     ODBC: 'odbc'
 };
 
-function executePromise(constring, contype, commands) {
-    if (!commands)
-        return Promise.reject('The commands argument is required.');
-    if (!Array.isArray(commands))
-        return Promise.reject('Commands argument must be an array type.');
-    if (commands.length === 0)
-        return Promise.reject('There must be more than one transaction to execute.');
-
-    for(let i = 0; i < commands.length; i++) {
-        let command = commands[i];
-
-        if (!command)
-            return Promise.reject("Command object must be defined.")
-        if (command.query == null || command.query.length === 0)
-            return Promise.reject('Command string cannot be null or empty.');
-        if (command.params != null && !Array.isArray(command.params))
-            command.params = [command.params];
-
-        if (command.params) {
-            if (!Array.isArray(command.params))
-                return Promise.reject('Params must be an array type.');
-
-            for(let i = 0; i < command.params.length; i++) {
-                if (Array.isArray(command.params[i]))
-                    return Promise.reject('Params cannot contain sub-arrays.');
-            }
-        }
-        else
-            command.params = [];
-    }
-
-    return new Promise((resolve, reject) => {
-        let options = {
-            constring: constring,
-            connection: contype,
-            commands: commands
-        };
-
-        data(options, (err, data) => {
-            if (err)
-                return reject(err);
-            
-            return resolve(data);
-        });
-    });
-}
-
 class Connection {
+    #edgeConnection
+
     constructor(constring, contype) {
         if (constring == null || constring.trim() === '')
             throw new Error('constring must not be null or empty');
@@ -78,10 +34,59 @@ class Connection {
 
         this.connectionString = constring;
         this.connectionType = contype;
+
+        this.#edgeConnection = newConnection({
+            constring,
+            contype
+        }, true);
+        this.close = promisify(this.#edgeConnection.close).bind(null, null);
+    }
+
+    transaction(commands) {
+        if (!commands)
+            return Promise.reject('The commands argument is required.');
+        if (!Array.isArray(commands))
+            return Promise.reject('Commands argument must be an array type.');
+        if (commands.length === 0)
+            return Promise.reject('There must be more than one transaction to execute.');
+
+        for (let i = 0; i < commands.length; i++) {
+            let command = commands[i];
+
+            if (!command)
+                return Promise.reject("Command object must be defined.")
+            if (command.query == null || command.query.length === 0)
+                return Promise.reject('Command string cannot be null or empty.');
+            if (command.params != null && !Array.isArray(command.params))
+                command.params = [command.params];
+
+            if (command.params) {
+                if (!Array.isArray(command.params))
+                    return Promise.reject('Params must be an array type.');
+
+                for (let i = 0; i < command.params.length; i++) {
+                    if (Array.isArray(command.params[i]))
+                        return Promise.reject('Params cannot contain sub-arrays.');
+                }
+            }
+            else
+                command.params = [];
+        }
+
+        return new Promise((resolve, reject) => {
+            this.#edgeConnection.run({
+                commands
+            }, (err, data) => {
+                if (err)
+                    return reject(err);
+
+                return resolve(data);
+            });
+        });
     }
 
     query(command, params) {
-        return executePromise(this.connectionString, this.connectionType, [
+        return this.transaction([
             {
                 query: command,
                 params: params,
@@ -91,7 +96,7 @@ class Connection {
     }
 
     scalar(command, params) {
-        return executePromise(this.connectionString, this.connectionType, [
+        return this.transaction([
             {
                 query: command,
                 params: params,
@@ -101,7 +106,7 @@ class Connection {
     }
 
     execute(command, params) {
-       return executePromise(this.connectionString, this.connectionType, [
+       return this.transaction([
             {
                 query: command,
                 params: params,
@@ -111,7 +116,7 @@ class Connection {
     }
 
     procedure(command, params) {
-        return executePromise(this.connectionString, this.connectionType, [
+        return this.transaction([
             {
                 query: command,
                 params: params,
@@ -121,17 +126,13 @@ class Connection {
     }
 
     procedureScalar(command, params) {
-        return executePromise(this.connectionString, this.connectionType, [
+        return this.transaction([
             {
                 query: command,
                 params: params,
                 type: COMMAND_TYPES.PROCEDURE_SCALAR
             }
         ]);
-    }
-
-    transaction(commands) {
-        return executePromise(this.connectionString, this.connectionType, commands)
     }
 }
 

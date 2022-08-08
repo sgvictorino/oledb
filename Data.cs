@@ -16,64 +16,85 @@ public class Startup
 {
     public async Task<object> Invoke(IDictionary<string, object> parameters)
     {
-        JsParameterCollection pcol = new JsParameterCollection(parameters);
+        JsConnectParameters pcol = new JsConnectParameters(parameters);
+        Connection connection = await Connection.NewConnection(pcol.ConnectionString, pcol.ConnectionType);
 
-        using (DbConnection connection = CreateConnection(pcol.ConnectionString, pcol.ConnectionType))
+        return new {
+            run = (Func<object, Task<object>>)(
+                async (commandParams) => {
+                    if (commandParams is IDictionary<string, object>) {
+                        return await connection.Run(new JsRunParameters(commandParams as IDictionary<string, object>));
+                    }
+                    throw new ArgumentException("Didn't pass parameters as IDictionary<string, object>");
+                }
+            ),
+            close = (Func<object, Task<object>>)(
+                (_) => {
+                    connection.Close();
+                    return Task.FromResult<object>(null);
+                }
+            )
+        };
+    }
+}
+
+public class Connection
+{
+    private DbConnection dbConnection;
+
+    private Connection(DbConnection connectionInstance) {
+        dbConnection = connectionInstance;
+    }
+
+    public static async Task<Connection> NewConnection(string connectionString, JsConnectionTypes type)
+    {
+        var connectionInstance = type == JsConnectionTypes.oledb ? new OleDbConnection(connectionString) as DbConnection:
+                                 type == JsConnectionTypes.odbc ? new OdbcConnection(connectionString) as DbConnection :
+                                 type == JsConnectionTypes.sql ? new SqlConnection(connectionString) as DbConnection :
+                                 null;
+        if (connectionInstance == null) {
+            throw new NotImplementedException();
+        }
+
+        await connectionInstance.OpenAsync();
+
+        return new Connection(connectionInstance);
+    }
+
+    public Task<object> Run(JsRunParameters pcol) {
+        using (var command = dbConnection.CreateCommand())
         {
-            try
+            //If there is only one command then execute it on it's own.
+            //Otherwise run all commands as a single transaction.
+            if (pcol.Commands.Count == 1)
             {
-                await connection.OpenAsync();
+                var com = pcol.Commands[0];
 
-                using (var command = connection.CreateCommand())
+                switch (com.type)
                 {
-                    //If there is only one command then execute it on it's own.
-                    //Otherwise run all commands as a single transaction.
-                    if (pcol.Commands.Count == 1)
-                    {
-                        var com = pcol.Commands[0];
-
-                        switch (com.type)
-                        {
-                            case JsQueryTypes.query:
-                                return await ExecuteQuery(command, com);
-                            case JsQueryTypes.scalar:
-                                return await ExecuteScalar(command, com);
-                            case JsQueryTypes.command:
-                                return await ExecuteNonQuery(command, com);
-                            case JsQueryTypes.procedure:
-                                return await ExecuteProcedure(command, com);
-                            case JsQueryTypes.procedure_scalar:
-                                return await ExecuteProcedureScalar(command, com);
-                            default:
-                                throw new NotSupportedException("Unsupported type of database command. Only 'query', 'scalar', 'command' and 'procedure' are supported.");
-                        }
-                    }
-                    else
-                    {
-                        return await ExecuteTransaction(connection, command, pcol.Commands);
-                    }
+                    case JsQueryTypes.query:
+                        return ExecuteQuery(command, com);
+                    case JsQueryTypes.scalar:
+                        return ExecuteScalar(command, com);
+                    case JsQueryTypes.command:
+                        return ExecuteNonQuery(command, com);
+                    case JsQueryTypes.procedure:
+                        return ExecuteProcedure(command, com);
+                    case JsQueryTypes.procedure_scalar:
+                        return ExecuteProcedureScalar(command, com);
+                    default:
+                        throw new NotSupportedException("Unsupported type of database command. Only 'query', 'scalar', 'command' and 'procedure' are supported.");
                 }
             }
-            finally
+            else
             {
-                connection.Close();
+                return ExecuteTransaction(command, pcol.Commands);
             }
         }
     }
 
-    private DbConnection CreateConnection(string connectionString, JsConnectionTypes type)
-    {
-        switch (type)
-        {
-            case JsConnectionTypes.oledb:
-                return new OleDbConnection(connectionString);
-            case JsConnectionTypes.odbc:
-                return new OdbcConnection(connectionString);
-            case JsConnectionTypes.sql:
-                return new SqlConnection(connectionString);
-        }
-
-        throw new NotImplementedException();
+    public void Close() {
+        dbConnection.Close();
     }
 
     private async Task<object> ExecuteQuery(DbCommand dbCommand, JsCommand jsCommand, object prev = null)
@@ -154,13 +175,13 @@ public class Startup
         return jsCommand;
     }
 
-    private async Task<object> ExecuteTransaction(DbConnection connection, DbCommand dbCommand, List<JsCommand> jsCommands)
+    private async Task<object> ExecuteTransaction(DbCommand dbCommand, List<JsCommand> jsCommands)
     {
         DbTransaction transaction = null;
 
         try
         {
-            transaction = connection.BeginTransaction(IsolationLevel.ReadCommitted);
+            transaction = dbConnection.BeginTransaction(IsolationLevel.ReadCommitted);
 
             dbCommand.Transaction = transaction;
 
@@ -311,27 +332,40 @@ public enum JsConnectionTypes
     sql
 }
 
-public class JsParameterCollection
-{
-    private IDictionary<string, object> _Raw;
-
-    public string ConnectionString { get; private set; }
-    public JsConnectionTypes ConnectionType { get; private set; }
-
-    public List<JsCommand> Commands { get; private set; }
+public abstract class JsParameterCollection {
+    protected IDictionary<string, object> _Raw;
 
     public JsParameterCollection(IDictionary<string, object> parameters)
     {
         if (parameters == null)
             throw new ArgumentNullException("parameters");
 
-        Commands = new List<JsCommand>();
-
         _Raw = parameters;
         ParseRawParameters();
     }
 
-    private void ParseRawParameters()
+    protected abstract void ParseRawParameters();
+
+    protected bool IsPropertyExist(dynamic settings, string name)
+    {
+        if (settings is ExpandoObject)
+            return ((IDictionary<string, object>)settings).ContainsKey(name);
+
+        return settings.GetType().GetProperty(name) != null;
+    }
+}
+
+public class JsConnectParameters : JsParameterCollection
+{
+    public string ConnectionString { get; private set; }
+    public JsConnectionTypes ConnectionType { get; private set; }
+
+    public JsConnectParameters(IDictionary<string, object> parameters) : base(parameters)
+    {
+
+    }
+
+    protected override void ParseRawParameters()
     {
         //Extract the connection string.
         ConnectionString = _Raw["constring"].ToString();
@@ -348,7 +382,20 @@ public class JsParameterCollection
             connectionType = "oledb";
 
         ConnectionType = (JsConnectionTypes)Enum.Parse(typeof(JsConnectionTypes), connectionType.ToString().ToLower());
+    }
+}
 
+public class JsRunParameters : JsParameterCollection
+{
+    public readonly List<JsCommand> Commands = new List<JsCommand>();
+
+    public JsRunParameters(IDictionary<string, object> parameters) : base(parameters)
+    {
+
+    }
+
+    protected override void ParseRawParameters()
+    {
         //Extract the commands array.
         dynamic commands = null;
 
@@ -381,14 +428,6 @@ public class JsParameterCollection
 
             Commands.Add(newCom);
         }
-    }
-
-    private bool IsPropertyExist(dynamic settings, string name)
-    {
-        if (settings is ExpandoObject)
-            return ((IDictionary<string, object>)settings).ContainsKey(name);
-
-        return settings.GetType().GetProperty(name) != null;
     }
 }
 

@@ -33,6 +33,8 @@ declare class Connection {
     transaction(
         commands: [TransactionItem, ...TransactionItem[]]
     ): Promise<CommandResult<unknown>[]>;
+
+    close(): Promise<void>;
 }
 
 type CommandParameter = unknown | CommandParameterOptions;
