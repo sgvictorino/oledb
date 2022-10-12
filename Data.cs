@@ -11,6 +11,7 @@ using System.Data.SqlClient;
 using System.Dynamic;
 using System.Threading.Tasks;
 using System.Linq;
+using System.IO;
 
 public class Startup
 {
@@ -19,19 +20,56 @@ public class Startup
         JsConnectParameters pcol = new JsConnectParameters(parameters);
         Connection connection = await Connection.NewConnection(pcol.ConnectionString, pcol.ConnectionType);
 
+        Func<object, JsRunParameters> ParseCommandParams = (commandParams) => {
+            if (commandParams is IDictionary<string, object>) {
+                return new JsRunParameters(commandParams as IDictionary<string, object>);
+            }
+            throw new ArgumentException("Didn't pass parameters as IDictionary<string, object>");
+        };
+        Func<object, DbTransaction> ParseTransaction = (transaction) => {
+            if (transaction is DbTransaction) {
+                return transaction as DbTransaction;
+            }
+            throw new ArgumentException("Didn't pass transaction as DbTransaction");
+        };
+
+        Task<object> emptyTask = Task.FromResult<object>(null);
         return new {
             run = (Func<object, Task<object>>)(
-                async (commandParams) => {
-                    if (commandParams is IDictionary<string, object>) {
-                        return await connection.Run(new JsRunParameters(commandParams as IDictionary<string, object>));
-                    }
-                    throw new ArgumentException("Didn't pass parameters as IDictionary<string, object>");
+                (commandParams) => {
+                    return connection.Run(ParseCommandParams(commandParams));
                 }
             ),
             close = (Func<object, Task<object>>)(
                 (_) => {
                     connection.Close();
-                    return Task.FromResult<object>(null);
+                    return emptyTask;
+                }
+            ),
+            beginTransaction = (Func<object, Task<object>>)(
+                (_) => {
+                    DbTransaction transaction = connection.BeginTransaction();
+                    return Task.FromResult<object>(new {
+                        transaction,
+                        run = (Func<object, Task<object>>)(
+                            (commandParams) => {
+                                var command = connection.dbConnection.CreateCommand();
+                                return connection.ExecuteTransaction(command, ParseCommandParams(commandParams).Commands, transaction);
+                            }
+                        ),
+                        commit = (Func<object, Task<object>>)(
+                            (__) => {
+                                transaction.Commit();
+                                return emptyTask;
+                            }
+                        ),
+                        rollback = (Func<object, Task<object>>)(
+                            (__) => {
+                                transaction.Rollback();
+                                return emptyTask;
+                            }
+                        )
+                    });
                 }
             )
         };
@@ -40,7 +78,7 @@ public class Startup
 
 public class Connection
 {
-    private DbConnection dbConnection;
+    public DbConnection dbConnection;
 
     private Connection(DbConnection connectionInstance) {
         dbConnection = connectionInstance;
@@ -95,6 +133,11 @@ public class Connection
 
     public void Close() {
         dbConnection.Close();
+    }
+
+    public DbTransaction BeginTransaction()
+    {
+        return dbConnection.BeginTransaction(IsolationLevel.ReadCommitted);
     }
 
     private async Task<object> ExecuteQuery(DbCommand dbCommand, JsCommand jsCommand, object prev = null)
@@ -175,15 +218,11 @@ public class Connection
         return jsCommand;
     }
 
-    private async Task<object> ExecuteTransaction(DbCommand dbCommand, List<JsCommand> jsCommands)
+    public async Task<object> ExecuteTransaction(DbCommand dbCommand, List<JsCommand> jsCommands, DbTransaction transaction = null)
     {
-        DbTransaction transaction = null;
-
         try
         {
-            transaction = dbConnection.BeginTransaction(IsolationLevel.ReadCommitted);
-
-            dbCommand.Transaction = transaction;
+            dbCommand.Transaction = transaction ?? dbConnection.BeginTransaction(IsolationLevel.ReadCommitted);
 
             object prevResult = null;
 
@@ -209,17 +248,19 @@ public class Connection
                     default:
                         throw new NotSupportedException("Unsupported type of database command. Only 'query', 'scalar', 'command' and 'procedure' are supported.");
                 }
-
                 prevResult = jsCommand.result;
             }
 
-            transaction.Commit();
+
+            if (transaction == null)
+                dbCommand.Transaction.Commit();
         }
         catch
         {
             try
             {
-                transaction.Rollback();
+                if (transaction == null)
+                    dbCommand.Transaction.Rollback();
             }
             catch
             {

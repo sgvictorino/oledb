@@ -45,6 +45,12 @@ declare class Connection {
         command: string,
         params?: CommandParameter | CommandParameter[]
     ): Promise<CommandResult<FieldType>>;
+
+    beginTransaction(): Promise<{
+        run<C extends TransactionItem>(command: C): Promise<TransactionCommandOutput<C>>;
+        rollback(): Promise<void>;
+        commit(): Promise<void>;
+    }>;
     transaction<C extends AtLeastOne<TransactionItem>>(
         commands: C
     ): Promise<C extends [TransactionItem] ? TransactionCommandOutput<C[0]> : { [I in keyof C] : TransactionCommandOutput<C[I]> }>;

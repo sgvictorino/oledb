@@ -5,6 +5,7 @@ Fork of [Mike Eason's `oledb`](https://github.com/mike-eason/oledb) with the fol
 - **Breaking:**
     - Returns `Date` values instead of `string`
     - Keeps `DbConnection` open for better performance; adds a `.close` method
+- `.beginTransaction`, with manual commit/rollback
 - TypeScript definitions
 - Makes `edge-js` a peer dependency for easier Node upgrades
 
@@ -86,6 +87,7 @@ There are a number available promises that can be used to send commands and quer
 - `.procedure(command, [parameters])` - Excutes a stored procedure and returns the number of rows affected.
 - `.procedureScalar(command, [parameters])` - Excutes a stored procedure and returns the result.
 - `.transaction(commands)` - Excutes an array of commands in a single transaction and returns the result of each.
+- `.beginTransaction()` - Starts a transaction, with `.run(commands)`, `.commit()`, and `.rollback()`.
 
 Each parameter is described below:
 
@@ -238,14 +240,30 @@ let commands = [
 
 db.transaction(commands)
 .then(results => {
-    console.log(results); //An array of query results.
+    console.log(results); //An array of query results. The transaction has been committed.
 },
 err => {
-    console.log(err);
+    console.log(err); //The transaction has already been rolled back.
 });
 ```
 
 *Note: The result field will contain an array of results if using a `query` command as multiple query results are supported by each executed query. See Multiple Data Sets above.*
+
+You can also commit and rollback manually with transaction instances from `.beginTransaction`:
+
+```js
+const transaction = await db.beginTransaction();
+const command = {
+    query: 'insert into account (name) values (?)',
+    params: [ 'Bob' ]
+};
+try {
+    await transaction.run(command);
+    await transaction.commit();
+} catch {
+    await transaction.rollback();
+}
+```
 
 All commands must follow the following structure:
 

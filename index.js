@@ -44,7 +44,12 @@ class Connection {
         this.#edgeConnection.close(null, true);
     }
 
-    transaction(commands) {
+    beginTransaction() {
+        const transactionInstance = this.#edgeConnection.beginTransaction(null, true);
+        return { ...transactionInstance, run: (command) => this.transaction([command], transactionInstance.run)};
+    }
+
+    transaction(commands, run = this.#edgeConnection.run) {
         if (!commands)
             return Promise.reject('The commands argument is required.');
         if (!Array.isArray(commands))
@@ -76,7 +81,7 @@ class Connection {
         }
 
         return new Promise((resolve, reject) => {
-            this.#edgeConnection.run({
+            run({
                 commands
             }, (err, data) => {
                 if (err)
