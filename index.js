@@ -42,7 +42,17 @@ class Connection {
         this.close = promisify(this.#edgeConnection.close).bind(null, null);
     }
 
-    transaction(commands) {
+    async beginTransaction() {
+        const transactionInstance = await promisify(this.#edgeConnection.beginTransaction)(null);
+        return {
+            commit: promisify(transactionInstance.commit).bind(null, null),
+            rollback: promisify(transactionInstance.rollback).bind(null, null),
+            run: (command) =>
+                this.transaction([command], transactionInstance.run),
+        };
+    }
+
+    transaction(commands, run = this.#edgeConnection.run) {
         if (!commands)
             return Promise.reject('The commands argument is required.');
         if (!Array.isArray(commands))
@@ -74,7 +84,7 @@ class Connection {
         }
 
         return new Promise((resolve, reject) => {
-            this.#edgeConnection.run({
+            run({
                 commands
             }, (err, data) => {
                 if (err)
