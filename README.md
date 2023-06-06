@@ -6,6 +6,7 @@ Fork of [Mike Eason's `oledb`](https://github.com/mike-eason/oledb) with the fol
     - Returns `Date` values instead of `string`
     - Keeps `DbConnection` open for better performance; adds a `.close` method
 - `.beginTransaction`, with manual commit/rollback
+- Managed transaction callbacks
 - TypeScript definitions
 - Makes `edge-js` a peer dependency for easier Node upgrades
 
@@ -87,6 +88,7 @@ There are a number available promises that can be used to send commands and quer
 - `.procedure(command, [parameters])` - Excutes a stored procedure and returns the number of rows affected.
 - `.procedureScalar(command, [parameters])` - Excutes a stored procedure and returns the result.
 - `.transaction(commands)` - Excutes an array of commands in a single transaction and returns the result of each.
+- `.transaction(callback)` - Run a callback that receives a transaction instance with automatic commit/rollback.
 - `.beginTransaction()` - Returns a transaction instance that requires manual commit/rollback.
 
 Each parameter is described below:
@@ -250,6 +252,28 @@ err => {
 *Note: The result field will contain an array of results if using a `query` command as multiple query results are supported by each executed query. See Multiple Data Sets above.*
 
 ### Transaction instances
+`.transaction` can be used to apply automatic rollbacks to an entire callback:
+
+```js
+db.transaction(t => {
+    await t.run({
+        query: 'insert into account (name) values (?)',
+        params: [ 'Bob' ]
+    })
+    return t.run({
+        query: 'select * from account where name = ?',
+        type: oledb.COMMAND_TYPES.QUERY,
+        params: [ 'Bob' ]
+    })
+})
+.then(result => {
+    console.log(result); //The data returned from the callback. The transaction has been committed.
+},
+err => {
+    console.log(err); //The transaction has already been rolled back.
+});
+```
+
 You can commit and rollback manually with transaction instances from `.beginTransaction`:
 
 ```js
