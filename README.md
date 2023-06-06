@@ -249,6 +249,27 @@ err => {
 
 *Note: The result field will contain an array of results if using a `query` command as multiple query results are supported by each executed query. See Multiple Data Sets above.*
 
+The same method can be used to apply automatic rollbacks to an entire callback:
+
+```js
+db.transaction(t => {
+    await t.run({
+        query: 'insert into account (name) values (?)',
+        params: [ 'Bob' ]
+    })
+    return t.run({
+        query: 'select * from account where name = ?',
+        type: oledb.COMMAND_TYPES.QUERY,
+        params: [ 'Bob' ]
+    })
+})
+.then(result => {
+    console.log(result); //The data returned from the callback. The transaction has been committed.
+},
+err => {
+    console.log(err); //The transaction has already been rolled back.
+});
+```
 You can also commit and rollback manually with transaction instances from `.beginTransaction`:
 
 ```js

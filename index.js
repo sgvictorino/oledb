@@ -49,7 +49,19 @@ class Connection {
         return { ...transactionInstance, run: (command) => this.transaction([command], transactionInstance.run)};
     }
 
-    transaction(commands, run = this.#edgeConnection.run) {
+    async transaction(commands, run = this.#edgeConnection.run) {
+        if (typeof commands === "function") {
+            const newTransaction = await this.beginTransaction();
+            try {
+                const result = await commands(newTransaction);
+                await newTransaction.commit();
+                return result;
+            } catch (error) {
+                await newTransaction.rollback();
+                throw error;
+            }
+        }
+
         if (!commands)
             return Promise.reject('The commands argument is required.');
         if (!Array.isArray(commands))

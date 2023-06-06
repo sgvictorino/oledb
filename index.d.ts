@@ -22,6 +22,13 @@ type GetCommandType<C extends TransactionItem> = C["type"] extends COMMAND_TYPES
 : COMMAND_TYPES.COMMAND;
 type TransactionCommandOutput<C extends TransactionItem> =
     Required<TransactionItem> & {type: GetCommandType<C>, result: CommandTypeToOutput[GetCommandType<C>];}
+
+type Transaction = {
+    run<C extends TransactionItem>(command: C): Promise<TransactionCommandOutput<C>>;
+    rollback(): Promise<void>;
+    commit(): Promise<void>;
+};
+
 declare class Connection {
     constructor(constring: string, contype: string | null);
 
@@ -46,14 +53,10 @@ declare class Connection {
         params?: CommandParameter | CommandParameter[]
     ): Promise<CommandResult<FieldType>>;
 
-    beginTransaction(): Promise<{
-        run<C extends TransactionItem>(command: C): Promise<TransactionCommandOutput<C>>;
-        rollback(): Promise<void>;
-        commit(): Promise<void>;
-    }>;
-    transaction<C extends AtLeastOne<TransactionItem>>(
-        commands: C
-    ): Promise<C extends [TransactionItem] ? TransactionCommandOutput<C[0]> : { [I in keyof C] : TransactionCommandOutput<C[I]> }>;
+    beginTransaction(): Promise<Transaction>;
+    transaction<C extends AtLeastOne<TransactionItem>, Return = void>(
+        commands: C | ((transaction: Transaction) => Promise<Return> | Return)
+    ): C extends Function ? Promise<Return> : Promise<C extends [TransactionItem] ? TransactionCommandOutput<C[0]> : { [I in keyof C] : TransactionCommandOutput<C[I]> }>;
 
     close(): void;
 }
