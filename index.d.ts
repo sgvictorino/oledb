@@ -2,11 +2,26 @@ export function oledbConnection(connectionString: string): Connection;
 export function odbcConnection(connectionString: string): Connection;
 export function sqlConnection(connectionString: string): Connection;
 
+type AtLeastOne<T> = [T, ...T[]];
+
 type TransactionItem = {
     query: string;
     params?: CommandParameter | CommandParameter[];
     type?: COMMAND_TYPES;
 }
+
+type CommandTypeToOutput = {
+    query: Record<string, FieldValue>[][];
+    command: number;
+    procedure: number;
+    procedure_scalar: FieldValue;
+    scalar: FieldValue;
+};
+type GetCommandType<C extends TransactionItem> = C["type"] extends COMMAND_TYPES
+? C["type"]
+: COMMAND_TYPES.COMMAND;
+type TransactionCommandOutput<C extends TransactionItem> =
+    Required<TransactionItem> & {type: GetCommandType<C>, result: CommandTypeToOutput[GetCommandType<C>];}
 declare class Connection {
     constructor(constring: string, contype: string | null);
 
@@ -30,9 +45,9 @@ declare class Connection {
         command: string,
         params?: CommandParameter | CommandParameter[]
     ): Promise<CommandResult<FieldType>>;
-    transaction(
-        commands: [TransactionItem, ...TransactionItem[]]
-    ): Promise<CommandResult<unknown>[]>;
+    transaction<C extends AtLeastOne<TransactionItem>>(
+        commands: C
+    ): Promise<C extends [TransactionItem] ? TransactionCommandOutput<C[0]> : { [I in keyof C] : TransactionCommandOutput<C[I]> }>;
 
     close(): void;
 }
