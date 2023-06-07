@@ -37,7 +37,7 @@ public class Startup
         return new {
             run = (Func<object, Task<object>>)(
                 (commandParams) => {
-                    return connection.Run(ParseCommandParams(commandParams));
+                    return connection.ExecuteTransaction(ParseCommandParams(commandParams).Commands);
                 }
             ),
             close = (Func<object, Task<object>>)(
@@ -53,8 +53,7 @@ public class Startup
                         transaction,
                         run = (Func<object, Task<object>>)(
                             (commandParams) => {
-                                var command = connection.dbConnection.CreateCommand();
-                                return connection.ExecuteTransaction(command, ParseCommandParams(commandParams).Commands, transaction);
+                                return connection.ExecuteTransaction(ParseCommandParams(commandParams).Commands, transaction);
                             }
                         ),
                         commit = (Func<object, Task<object>>)(
@@ -97,38 +96,6 @@ public class Connection
         await connectionInstance.OpenAsync();
 
         return new Connection(connectionInstance);
-    }
-
-    public Task<object> Run(JsRunParameters pcol) {
-        using (var command = dbConnection.CreateCommand())
-        {
-            //If there is only one command then execute it on it's own.
-            //Otherwise run all commands as a single transaction.
-            if (pcol.Commands.Count == 1)
-            {
-                var com = pcol.Commands[0];
-
-                switch (com.type)
-                {
-                    case JsQueryTypes.query:
-                        return ExecuteQuery(command, com);
-                    case JsQueryTypes.scalar:
-                        return ExecuteScalar(command, com);
-                    case JsQueryTypes.command:
-                        return ExecuteNonQuery(command, com);
-                    case JsQueryTypes.procedure:
-                        return ExecuteProcedure(command, com);
-                    case JsQueryTypes.procedure_scalar:
-                        return ExecuteProcedureScalar(command, com);
-                    default:
-                        throw new NotSupportedException("Unsupported type of database command. Only 'query', 'scalar', 'command' and 'procedure' are supported.");
-                }
-            }
-            else
-            {
-                return ExecuteTransaction(command, pcol.Commands);
-            }
-        }
     }
 
     public void Close() {
@@ -218,8 +185,10 @@ public class Connection
         return jsCommand;
     }
 
-    public async Task<object> ExecuteTransaction(DbCommand dbCommand, List<JsCommand> jsCommands, DbTransaction transaction = null)
+    public async Task<object> ExecuteTransaction(List<JsCommand> jsCommands, DbTransaction transaction = null, DbCommand dbCommand = null)
     {
+        dbCommand = dbCommand ?? dbConnection.CreateCommand();
+
         try
         {
             dbCommand.Transaction = transaction ?? dbConnection.BeginTransaction(IsolationLevel.ReadCommitted);
@@ -269,6 +238,8 @@ public class Connection
 
             throw;
         }
+
+        if (jsCommands.Count == 1) return jsCommands[0];
 
         return jsCommands;
     }

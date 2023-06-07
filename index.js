@@ -22,6 +22,27 @@ const CONNECTION_TYPES = {
     ODBC: 'odbc'
 };
 
+const runFunctions = (transaction, transactionMethod) => {
+  const runWithType = (type) => (query, params) =>
+    transactionMethod(
+      [
+        {
+          query,
+          params,
+          type,
+        },
+      ],
+      transaction?.run
+    );
+  return {
+    query: runWithType(COMMAND_TYPES.QUERY),
+    scalar: runWithType(COMMAND_TYPES.SCALAR),
+    execute: runWithType(COMMAND_TYPES.COMMAND),
+    procedure: runWithType(COMMAND_TYPES.PROCEDURE),
+    procedureScalar: runWithType(COMMAND_TYPES.PROCEDURE_SCALAR),
+  };
+};
+
 class Connection {
     #edgeConnection
 
@@ -38,6 +59,7 @@ class Connection {
             constring,
             contype
         }, true);
+        Object.entries(runFunctions(undefined, this.transaction.bind(this))).map(([name, f]) => this[name] = f)
     }
 
     close() {
@@ -46,7 +68,12 @@ class Connection {
 
     beginTransaction() {
         const transactionInstance = this.#edgeConnection.beginTransaction(null, true);
-        return { ...transactionInstance, run: (command) => this.transaction([command], transactionInstance.run)};
+        return {
+          ...transactionInstance,
+          ...runFunctions(transactionInstance, this.transaction.bind(this)),
+          run: (command) =>
+            this.transaction([command], transactionInstance.run),
+        };
     }
 
     async transaction(commands, run = this.#edgeConnection.run) {
@@ -102,56 +129,6 @@ class Connection {
                 return resolve(data);
             });
         });
-    }
-
-    query(command, params) {
-        return this.transaction([
-            {
-                query: command,
-                params: params,
-                type: COMMAND_TYPES.QUERY
-            }
-        ]);
-    }
-
-    scalar(command, params) {
-        return this.transaction([
-            {
-                query: command,
-                params: params,
-                type: COMMAND_TYPES.SCALAR
-            }
-        ]);
-    }
-
-    execute(command, params) {
-       return this.transaction([
-            {
-                query: command,
-                params: params,
-                type: COMMAND_TYPES.COMMAND
-            }
-        ]);
-    }
-
-    procedure(command, params) {
-        return this.transaction([
-            {
-                query: command,
-                params: params,
-                type: COMMAND_TYPES.PROCEDURE
-            }
-        ]);
-    }
-
-    procedureScalar(command, params) {
-        return this.transaction([
-            {
-                query: command,
-                params: params,
-                type: COMMAND_TYPES.PROCEDURE_SCALAR
-            }
-        ]);
     }
 }
 
