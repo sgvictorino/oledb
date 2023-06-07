@@ -25,11 +25,9 @@ type Transaction = {
     run<C extends TransactionItem>(command: C): Promise<TransactionCommandOutput<C>>;
     rollback(): Promise<void>;
     commit(): Promise<void>;
-};
+} & RunFunctions;
 
-declare class Connection {
-    constructor(constring: string, contype: string | null);
-
+type RunFunctions = {
     query<EntityType = Record<string, FieldValue>>(
         command: string,
         params?: CommandParameter | CommandParameter[]
@@ -50,6 +48,10 @@ declare class Connection {
         command: string,
         params?: CommandParameter | CommandParameter[]
     ): Promise<CommandResult<FieldType>>;
+};
+
+declare abstract class ConnectionManagement {
+    constructor(constring: string, contype: string | null);
 
     beginTransaction(): Promise<Transaction>;
 
@@ -63,6 +65,7 @@ declare class Connection {
 
     close(): Promise<void>;
 }
+declare type Connection = ConnectionManagement & RunFunctions;
 
 type CommandParameter = unknown | CommandParameterOptions;
 
