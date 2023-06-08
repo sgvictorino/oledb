@@ -76,6 +76,18 @@ class Connection {
         };
     }
 
+    async transactionCallback(cb) {
+        this.#edgeConnection.transactionCallback({ cb: (data, callback) => {
+            console.log(data)
+            console.log("hey")
+            cb().then(() => callback(null, {})).catch(console.error)
+        } }, (error, result) => { 
+            if (error) throw error
+            console.log(result)
+            // console.log(payload, callback);
+        })
+    }
+
     async transaction(commands, run = this.#edgeConnection.run) {
         if (typeof commands === "function") {
             const newTransaction = await this.beginTransaction();

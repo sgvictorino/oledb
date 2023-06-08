@@ -1,5 +1,6 @@
 //#r "System.dll"
 //#r "System.Data.dll"
+//#r "System.Transactions.dll"
 
 using System;
 using System.Collections.Generic;
@@ -15,6 +16,8 @@ using System.IO;
 
 public class Startup
 {
+    public delegate Task HasTransactionScope();
+
     public async Task<object> Invoke(IDictionary<string, object> parameters)
     {
         JsConnectParameters pcol = new JsConnectParameters(parameters);
@@ -69,6 +72,29 @@ public class Startup
                             }
                         )
                     });
+                }
+            ),
+            transactionCallback = (Func<dynamic, Task<object>>)(
+                async (callback) => {
+                    using (System.Transactions.TransactionScope scope = new System.Transactions.TransactionScope(System.Transactions.TransactionScopeAsyncFlowOption.Enabled))
+                    {
+                        // connection.dbConnection.EnlistTransaction(System.Transactions.Transaction.Current); // causes "local transactions unsupported" unless automatic transaction enlistment is disabled https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ms724518(v=vs.85)?redirectedfrom=MSDN
+                        // object test = (callback.cb as Func<object, Task<object>>)(Environment.Version).Result; // blocks forever
+                        try {
+                        var result = await (callback.cb as Func<object, Task<object>>)(Environment.Version);
+                        } catch (Exception ex) {
+                            throw new ArgumentException(ex.Message);
+                        }
+                        // throw new ArgumentException(result.GetType().ToString());
+                        // Debug.Log(result);
+                        // scope.Complete();
+                    }
+                    // if (callback is HasTransactionScope) {
+                    //     (callback as HasTransactionScope)();
+                    // } else {
+                    //     throw new ArgumentException("Callback is not a function!");
+                    // }
+                    return Task.FromResult<object>(new {});
                 }
             )
         };
@@ -523,3 +549,4 @@ public class JsCommandParameter
     public byte? scale { get; set; }
     public byte? size { get; set; }
 }
+
