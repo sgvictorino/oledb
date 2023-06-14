@@ -72,8 +72,11 @@ class Connection {
             commit: promisify(transactionInstance.commit).bind(null, null),
             rollback: promisify(transactionInstance.rollback).bind(null, null),
             ...runFunctions(transactionInstance, this.transaction),
-            run: (command) =>
-                this.transaction([command], transactionInstance.run),
+            run: (commands) =>
+                this.transaction(
+                    Array.isArray(commands) ? commands : [commands],
+                    transactionInstance.run
+                ),
         };
     }
 
