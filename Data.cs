@@ -197,25 +197,34 @@ public class Connection
 
             foreach (JsCommand jsCommand in jsCommands)
             {
-                switch (jsCommand.type)
+                try
                 {
-                    case JsQueryTypes.command:
-                        await ExecuteNonQuery(dbCommand, jsCommand, prevResult);
-                        break;
-                    case JsQueryTypes.query:
-                        await ExecuteQuery(dbCommand, jsCommand, prevResult);
-                        break;
-                    case JsQueryTypes.scalar:
-                        await ExecuteScalar(dbCommand, jsCommand, prevResult);
-                        break;
-                    case JsQueryTypes.procedure:
-                        await ExecuteProcedure(dbCommand, jsCommand, prevResult);
-                        break;
-                    case JsQueryTypes.procedure_scalar:
-                        await ExecuteProcedureScalar(dbCommand, jsCommand, prevResult);
-                        break;
-                    default:
-                        throw new NotSupportedException("Unsupported type of database command. Only 'query', 'scalar', 'command' and 'procedure' are supported.");
+                    switch (jsCommand.type)
+                    {
+                        case JsQueryTypes.command:
+                            await ExecuteNonQuery(dbCommand, jsCommand, prevResult);
+                            break;
+                        case JsQueryTypes.query:
+                            await ExecuteQuery(dbCommand, jsCommand, prevResult);
+                            break;
+                        case JsQueryTypes.scalar:
+                            await ExecuteScalar(dbCommand, jsCommand, prevResult);
+                            break;
+                        case JsQueryTypes.procedure:
+                            await ExecuteProcedure(dbCommand, jsCommand, prevResult);
+                            break;
+                        case JsQueryTypes.procedure_scalar:
+                            await ExecuteProcedureScalar(dbCommand, jsCommand, prevResult);
+                            break;
+                        default:
+                            throw new NotSupportedException("Unsupported type of database command. Only 'query', 'scalar', 'command' and 'procedure' are supported.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ex.Data.Add("query", jsCommand.query);
+                    ex.Data.Add("params", jsCommand.@params);
+                    throw;
                 }
 
                 prevResult = jsCommand.result;
