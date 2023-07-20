@@ -37,6 +37,11 @@ public class Startup
         return new {
             run = (Func<object, Task<object>>)(
                 (commandParams) => {
+                    return connection.ExecuteAll(ParseCommandParams(commandParams).Commands);
+                }
+            ),
+            runAsTransaction = (Func<object, Task<object>>)(
+                (commandParams) => {
                     return connection.ExecuteTransaction(ParseCommandParams(commandParams).Commands);
                 }
             ),
@@ -125,64 +130,71 @@ public class Connection
         return jsCommand;
     }
 
-    public async Task<object> ExecuteTransaction(List<JsCommand> jsCommands, DbTransaction transaction = null, DbCommand dbCommand = null)
+    public async Task<object> ExecuteTransaction(List<JsCommand> jsCommands, DbTransaction existingTransaction = null, DbCommand dbCommand = null)
     {
-        dbCommand = dbCommand ?? dbConnection.CreateCommand();
-
+        DbTransaction transaction = existingTransaction ?? dbConnection.BeginTransaction(IsolationLevel.ReadCommitted);
         try
         {
-            dbCommand.Transaction = transaction ?? dbConnection.BeginTransaction(IsolationLevel.ReadCommitted);
+            object result = await ExecuteAll(jsCommands, transaction, dbCommand);
+            if (existingTransaction == null)
+                transaction.Commit();
 
-            object prevResult = null;
-
-            foreach (JsCommand jsCommand in jsCommands)
-            {
-                try
-                {
-                    dbCommand.CommandText = jsCommand.query;
-                    AddCommandParameters(dbCommand, jsCommand, prevResult);
-
-                    if (new [] { JsQueryTypes.procedure, JsQueryTypes.procedure_scalar }.ToList().Contains(jsCommand.type))
-                        dbCommand.CommandType = CommandType.StoredProcedure;
-
-                    if (jsCommand.type == JsQueryTypes.query)
-                        await ExecuteQuery(dbCommand, jsCommand);
-                    else if (new [] { JsQueryTypes.command, JsQueryTypes.procedure }.Contains(jsCommand.type))
-                        jsCommand.result = await dbCommand.ExecuteNonQueryAsync();
-                    else if (new [] { JsQueryTypes.scalar, JsQueryTypes.procedure_scalar }.Contains(jsCommand.type))
-                        jsCommand.result = await dbCommand.ExecuteScalarAsync();
-                    else
-                        throw new NotSupportedException("Unsupported type of database command. Only 'query', 'scalar', 'command' and 'procedure' are supported.");
-
-                    UpdateCommandParameters(dbCommand, jsCommand);
-                }
-                catch (Exception ex)
-                {
-                    ex.Data.Add("query", jsCommand.query);
-                    ex.Data.Add("params", jsCommand.@params);
-                    throw;
-                }
-
-                prevResult = jsCommand.result;
-            }
-
-
-            if (transaction == null)
-                dbCommand.Transaction.Commit();
+            return result;
         }
         catch
         {
             try
             {
-                if (transaction == null)
-                    dbCommand.Transaction.Rollback();
+                if (existingTransaction == null)
+                    transaction.Rollback();
             }
             catch
             {
-                //Do nothing here; transaction is not active.
+
             }
 
             throw;
+        }
+    }
+
+    public async Task<object> ExecuteAll(List<JsCommand> jsCommands, DbTransaction transaction = null, DbCommand dbCommand = null)
+    {
+        dbCommand = dbCommand ?? dbConnection.CreateCommand();
+
+        if (transaction != null)
+            dbCommand.Transaction = transaction;
+
+        object prevResult = null;
+
+        foreach (JsCommand jsCommand in jsCommands)
+        {
+            try
+            {
+                dbCommand.CommandText = jsCommand.query;
+                AddCommandParameters(dbCommand, jsCommand, prevResult);
+
+                if (new [] { JsQueryTypes.procedure, JsQueryTypes.procedure_scalar }.ToList().Contains(jsCommand.type))
+                    dbCommand.CommandType = CommandType.StoredProcedure;
+
+                if (jsCommand.type == JsQueryTypes.query)
+                    await ExecuteQuery(dbCommand, jsCommand);
+                else if (new [] { JsQueryTypes.command, JsQueryTypes.procedure }.Contains(jsCommand.type))
+                    jsCommand.result = await dbCommand.ExecuteNonQueryAsync();
+                else if (new [] { JsQueryTypes.scalar, JsQueryTypes.procedure_scalar }.Contains(jsCommand.type))
+                    jsCommand.result = await dbCommand.ExecuteScalarAsync();
+                else
+                    throw new NotSupportedException("Unsupported type of database command. Only 'query', 'scalar', 'command' and 'procedure' are supported.");
+
+                UpdateCommandParameters(dbCommand, jsCommand);
+            }
+            catch (Exception ex)
+            {
+                ex.Data.Add("query", jsCommand.query);
+                ex.Data.Add("params", jsCommand.@params);
+                throw;
+            }
+
+            prevResult = jsCommand.result;
         }
 
         if (jsCommands.Count == 1) return jsCommands[0];

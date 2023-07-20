@@ -24,14 +24,14 @@ type AllTransactionOutput<C extends AtLeastOne<TransactionItem>> =
     Promise<C extends [TransactionItem] ? TransactionCommandOutput<C[0]> : { [I in keyof C] : TransactionCommandOutput<C[I]> }>;
 
 type Transaction = {
-    run<C extends AtLeastOne<TransactionItem> | TransactionItem>(
-        command: C
-    ): Promise<C extends TransactionItem ? TransactionCommandOutput<C> : C extends AtLeastOne<TransactionItem> ? AllTransactionOutput<C> : never>;
     rollback(): Promise<void>;
     commit(): Promise<void>;
 } & RunFunctions;
 
 type RunFunctions = {
+    run<C extends AtLeastOne<TransactionItem> | TransactionItem>(
+        command: C
+    ): Promise<C extends TransactionItem ? TransactionCommandOutput<C> : C extends AtLeastOne<TransactionItem> ? AllTransactionOutput<C> : never>;
     query<EntityType = Record<string, FieldValue>>(
         command: string,
         params?: CommandParameter | CommandParameter[]

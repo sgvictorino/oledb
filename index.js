@@ -61,7 +61,7 @@ class Connection {
             contype
         }, true);
         this.close = promisify(this.#edgeConnection.close).bind(null, null);
-        Object.entries(runFunctions(undefined, this.transaction.bind(this))).forEach(
+        Object.entries(runFunctions(undefined, this.run.bind(this))).forEach(
             ([name, f]) => (this[name] = f),
         );
     }
@@ -71,16 +71,16 @@ class Connection {
         return {
             commit: promisify(transactionInstance.commit).bind(null, null),
             rollback: promisify(transactionInstance.rollback).bind(null, null),
-            ...runFunctions(transactionInstance, this.transaction),
+            ...runFunctions(transactionInstance, this.run),
             run: (commands) =>
-                this.transaction(
+                this.run(
                     Array.isArray(commands) ? commands : [commands],
                     transactionInstance.run
                 ),
         };
     }
 
-    async transaction(commands, run = this.#edgeConnection.run) {
+    async transaction(commands) {
         if (typeof commands === "function") {
             const newTransaction = await this.beginTransaction();
             try {
@@ -93,6 +93,10 @@ class Connection {
             }
         }
 
+        return this.run(commands, this.#edgeConnection.runAsTransaction);
+    }
+
+    async run(commands, run = this.#edgeConnection.run) {
         if (!commands)
             return Promise.reject('The commands argument is required.');
         if (!Array.isArray(commands))
