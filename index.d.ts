@@ -2,11 +2,13 @@ export function oledbConnection(connectionString: string): Connection;
 export function odbcConnection(connectionString: string): Connection;
 export function sqlConnection(connectionString: string): Connection;
 
-type AtLeastOne<T> = [T, ...T[]];
+type AtLeastOne<T> = AllowReadonly<[T, ...T[]]>;
+type AllowReadonly<T> = T | Readonly<T>
+type Params = CommandParameter | AllowReadonly<CommandParameter[]>;
 
 type TransactionItem = {
     query: string;
-    params?: CommandParameter | CommandParameter[];
+    params?: Params;
     type?: COMMAND_TYPES;
 }
 
@@ -34,23 +36,23 @@ type RunFunctions = {
     ): Promise<C extends TransactionItem ? TransactionCommandOutput<C> : C extends AtLeastOne<TransactionItem> ? AllTransactionOutput<C> : never>;
     query<EntityType = Record<string, ValueOut>>(
         command: string,
-        params?: CommandParameter | CommandParameter[]
+        params?: Params
     ): Promise<CommandResult<EntityType[][]>>;
     scalar<FieldType = ValueOut>(
         command: string,
-        params?: CommandParameter | CommandParameter[]
+        params?: Params
     ): Promise<CommandResult<FieldType>>;
     execute(
         command: string,
-        params?: CommandParameter | CommandParameter[]
+        params?: Params
     ): Promise<CommandResult<number>>;
     procedure(
         command: string,
-        params?: CommandParameter | CommandParameter[]
+        params?: Params
     ): Promise<CommandResult<number>>;
     procedureScalar<FieldType = ValueOut>(
         command: string,
-        params?: CommandParameter | CommandParameter[]
+        params?: Params
     ): Promise<CommandResult<FieldType>>;
 };
 
