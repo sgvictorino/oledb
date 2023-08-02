@@ -11,11 +11,11 @@ type TransactionItem = {
 }
 
 type CommandTypeToOutput = {
-    query: Record<string, FieldValue>[][];
+    query: Record<string, ValueOut>[][];
     command: number;
     procedure: number;
-    procedure_scalar: FieldValue;
-    scalar: FieldValue;
+    procedure_scalar: ValueOut;
+    scalar: ValueOut;
 };
 type GetCommandType<C extends TransactionItem> = C["type"] extends COMMAND_TYPES ? C["type"] : COMMAND_TYPES.COMMAND;
 type TransactionCommandOutput<C extends TransactionItem> =
@@ -32,11 +32,11 @@ type RunFunctions = {
     run<C extends AtLeastOne<TransactionItem> | TransactionItem>(
         command: C
     ): Promise<C extends TransactionItem ? TransactionCommandOutput<C> : C extends AtLeastOne<TransactionItem> ? AllTransactionOutput<C> : never>;
-    query<EntityType = Record<string, FieldValue>>(
+    query<EntityType = Record<string, ValueOut>>(
         command: string,
         params?: CommandParameter | CommandParameter[]
     ): Promise<CommandResult<EntityType[][]>>;
-    scalar<FieldType = FieldValue>(
+    scalar<FieldType = ValueOut>(
         command: string,
         params?: CommandParameter | CommandParameter[]
     ): Promise<CommandResult<FieldType>>;
@@ -48,7 +48,7 @@ type RunFunctions = {
         command: string,
         params?: CommandParameter | CommandParameter[]
     ): Promise<CommandResult<number>>;
-    procedureScalar<FieldType = FieldValue>(
+    procedureScalar<FieldType = ValueOut>(
         command: string,
         params?: CommandParameter | CommandParameter[]
     ): Promise<CommandResult<FieldType>>;
@@ -71,11 +71,11 @@ declare abstract class ConnectionManagement {
 }
 declare type Connection = ConnectionManagement & RunFunctions;
 
-type CommandParameter = unknown | CommandParameterOptions;
+type CommandParameter = ValueIn | CommandParameterOptions;
 
 interface CommandParameterOptions {
     name?: string;
-    value?: unknown;
+    value?: ValueIn;
     direction?: PARAMETER_DIRECTIONS;
     isNullable?: boolean;
     precision?: Uint8Array;
@@ -83,7 +83,8 @@ interface CommandParameterOptions {
     size?: Uint8Array;
 }
 
-type FieldValue = string | boolean | number | Date | null;
+type ValueIn = string | boolean | number | Date | null | undefined;
+type ValueOut = Exclude<ValueIn, undefined>;
 
 interface CommandResult<Result> {
     query: string;
